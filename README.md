@@ -1,129 +1,173 @@
-# omarchy-on-cachyos
+# Omarchy sobre CachyOS
 
-- UPDATE 20-May-2026: The install script now includes interactive version selection for choosing between Stable releases and Bleeding Edge.
-- UPDATE 1-October-2025: The install script has been updated to support Omarchy 3.0+ out of the box.
+Adaptador comunitario **experimental** para instalar el escritorio de Omarchy
+**4.0.4 (Quattro)** en CachyOS x86_64. Conserva la distribución, el kernel, los
+controladores, el cargador de arranque y la política de Snapper de CachyOS.
+Instala los programas del escritorio y sus configuraciones de usuario.
 
-## 1. Introduction
+## Por qué fallaba `./install.sh`
 
-This project provides an installation script for implementing DHH's Omarchy configuration on top of CachyOS. Omarchy is an 'opinionated' desktop setup, based on Hyprland that emphasizes simplicity and productivity, while CachyOS offers a performance-optimized Arch Linux distribution.
+Omarchy 4 dejó de distribuir el instalador `install.sh`: ahora utiliza paquetes
+del sistema y la instalación desde su ISO. Por eso `cd "$HOME/omarchy"` no arregla
+`./install.sh: No such file or directory` al descargar Quattro.
+El instalador anterior también mezclaba rutas relativas y podía continuar
+después de errores de descarga o de modificación de archivos.
 
-## 2. What This Script Does and Does Not Do
+Este fork verifica el tag `v4.0.4` contra el commit
+`c668141e9c42b13c80c9ca4ea108e11708c5e8a5`, construye el paquete local
+`omarchy-cachyos` y ejecuta la preparación de usuario de Quattro. No ejecuta
+`install.sh`, ni instala los paquetes oficiales `omarchy` / `omarchy-settings`:
+en x86_64 esos paquetes añaden dependencias de Limine y ajustes de arranque.
+La versión se fija deliberadamente; una versión futura debe revisarse antes de
+cambiar `bin/release.sh` y el `PKGBUILD`. No se ofrece una opción `main/dev`.
 
-This installation script does the following three things:
+## Antes de instalar
 
-  1) Prompts for and fetches your preferred version of Omarchy (Stable tags or Bleeding Edge)
-  2) Makes adjustments to the Omarchy install scripts to support installation on CachyOS
-  3) Launches the installation of Omarchy on an already setup CachyOS system
-  4) Installs and configures NVIDIA 580xx proprietary drivers
+- CachyOS ya instalado, x86_64, raíz Btrfs y configuración Snapper `root` válida.
+- Se recomienda una instalación nueva con el escritorio Hyprland de CachyOS y
+  SDDM. El adaptador también instala SDDM si falta. Rechaza GNOME, Plasma y una
+  instalación de los paquetes oficiales de Omarchy.
+- Ejecuta desde tu usuario normal, **sin `sudo` delante del script**. Bash es el
+  intérprete del instalador; tu shell interactiva puede seguir siendo Fish.
+- Los controladores gráficos deben funcionar antes de empezar. Este adaptador
+  no fuerza NVIDIA 580xx, no instala controladores con `chwd`, ni cambia módulos
+  del kernel. Las actualizaciones normales de pacman siguen aplicándose.
+- Omarchy usa configuración Lua de Hyprland; el paquete exige Hyprland >= 0.55.
+- Conexión a Internet y espacio para paquetes, caché, copia de `.config` y
+  snapshot. Guarda aparte tus datos: un snapshot de raíz puede excluir `/home`.
 
-This script does not:
+**Límite de validación:** hay pruebas de Bash, descarga, rutas y contenido del
+paquete con las fuentes reales de 4.0.4. No constituyen una instalación completa
+en CachyOS ni una prueba de inicio gráfico, GPU, audio o Wi-Fi. Prueba primero en
+una instalación prescindible o una VM con snapshot.
 
- 1) Install CachyOS or any other Linux operating system
- 2) Partition, format, or encrypt hard disks
- 3) Install or configure a boot loader
- 5) Install or configure a login display manager
+## Instalación paso a paso
 
-All of the above need to be done when you install CachyOS. 
+1. Actualiza CachyOS e instala las herramientas iniciales:
 
-## 3. Important Notes
-
-This script (and README.md) is intended primarily for the experienced Arch Linux user. The author of this README.md assumes the reader is comfortable using a shell/command line and is familiar with Arch specific terms such as AUR.
-
-The philosophy behind this script is to produce a strong and stable blend of CachyOS and Omarchy that changes as little as possible between the two. This script does not add software or make configuration changes outside of what CachyOS or Omarchy provide as default, except when such software or configurations provided by CachyOS and Omarchy are in conflict. In these cases, the script will choose the following:
-
-1. AUR helper: CachyOS uses Paru by default while Omarchy uses Yay. This script opts for Yay and will install it if not already installed.
-
-2. Shell: CachyOS uses the Fish shell by default while Omarchy uses Bash. This script will keep Fish as the default interactive shell.
-
-3. TLDR implementation: CachyOS installs Tealdeer by default, which is a TLDR implementation written in Rust. This script will preserve use of Tealdeer.
-
-4. Mise: Omarchy will setup Mise to run automatically via mise-activate. This script will supply the right mise-activate command for the fish shell.
-
-5. Login System: As a distribution, Omarchy skips installation of a login display manager. Instead, Hyprland autostarts and password protection is provided upon boot by the LUKS full disk encryption service. This script, however, assumes a display manager is installed. (Note: this script does not install a display manager, but also does not configure Hyprland to start automatically if a display manager is not installed.)
-
-6. Full Disk Encryption: As a distribution, Omarchy automatically turns on full disk encryption via LUKS. This script, however, leaves this decision up to the user. CachyOS can be installed with or without full disk encryption, and this script will install Omarchy on either setup.
-
-7. NVIDIA Drivers: *By default, CachyOS and Omarchy may attempt to use the latest NVIDIA drivers with open kernel modules. This script explicitly downgrades/pins the driver to the* *580xx proprietary series* *using CachyOS's* `chwd` *tool. This is a deliberate choice to fix widespread issues with hardware acceleration, electron apps, and browser flickering.*
-
-## 4. Pre-Requisites
-
-IMPORTANT: This script does not install CachyOS. You must do that separately (and first.) This script is intended to be run on a fresh installation of CachyOS with the following configuration choices made: (Note, for information on installing CachyOS, please refer to https://www.cachyos.org.) 
-
-1. File System: You must choose BTRFS as the file system and Snapper as the snapshot manager. This aligns with CachyOS's default recommendation for most systems, and is required for Omarchy to properly function.
-
-2. Shell: You must choose Fish as the default shell for this installation script to work properly. (This is the default CachyOS shell choice.)
-
-3. Desktop Environment to Install: You can install a minimal system with no desktop environment or you can choose to install the CachyOS Hyprland Desktop Environment. If you have CachyOS install Hyprland, it will also install SDDM as the login display manager by default. Do not install GNOME or KDE.
-
-4. Graphics Drivers for NVIDIA users: 
-
-5. This script now automatically handles NVIDIA driver installation by enforcing the proprietary 580xx drivers (via CachyOS `chwd`). This is necessary to avoid known regressions with hardware video decoding and browser flickering present in the newer open-kernel module drivers.
-
-   **Important:** 
-
-   To enable hardware video decode via NVDEC in chromium, you must:
-   
-   1. Add the following to `~/.config/chromium-flags.conf`:       ```       --enable-features=VaapiOnNvidiaGPUs       ```
-   2. Install the [enhanced-h264ify extension](https://chromewebstore.google.com/detail/enhanced-h264ify/omkfmpieigblcllmkgbflkikinpkodlk) and disable **VP8** and **AV1** codecs.
-   
-   
-   
-   To fully enable hardware acceleration in Firefox, you must 
-   
-   1. Install the [enhanced-h264ify add-on](https://addons.mozilla.org/en-US/firefox/addon/enhanced-h264ify/) and disable **VP8** and **AV1** codecs and manually add the following overrides to your `user.js`:
-   
-   ```js
-   // FORCE NVIDIA HARDWARE ACCELERATION
-   user_pref("media.hardware-video-decoding.force-enabled", true);
-   user_pref("media.hardware-video-encoding.force-enabled", true);
-   user_pref("layers.acceleration.force-enabled", true);
-   user_pref("webgl.force-enabled", true);
-   user_pref("media.ffmpeg.vaapi.enabled", true);
-   user_pref("media.rdd-ffmpeg.enabled", true);
-   user_pref("media.av1.enabled", true);
-   user_pref("widget.dmabuf.force-enabled", true);
-   user_pref("gfx.x11-egl.force-enabled", true);
+   ```bash
+   sudo pacman -Syu --needed git base-devel snapper
    ```
 
-Other configuration changes are up to you. Note, however, that this script has not been extensively tested on various CachyOS installations other than the author's own machine.
+   Si la actualización cambia el kernel, reinicia antes de continuar y verifica
+   tu escritorio/conexión. Comprueba el sistema:
 
-## 5. Installation Instructions
+   ```bash
+   uname -r
+   findmnt -n -o FSTYPE /
+   sudo snapper -c root get-config
+   ```
 
-```bash
-# Clone the repository
-git clone https://github.com/mroboff/omarchy-on-cachyos.git
+   La raíz debe ser `btrfs`. Si Snapper no tiene configuración `root`, termina la
+   configuración de snapshots de CachyOS antes de usar el adaptador.
 
-# Navigate to the project directory
-cd omarchy-on-cachyos/bin
+2. Clona **este fork**:
 
-# Make the script executable
-chmod +x install-omarchy-on-cachyos.sh
+   ```bash
+   git clone https://github.com/MiguelU-coder/omarchy-on-cachyos.git
+   cd omarchy-on-cachyos
+   ```
 
-# Run the installation script
-./install-omarchy-on-cachyos.sh
+   Si el arreglo todavía está en una rama/PR, clónala directamente:
+
+   ```bash
+   git clone --branch fix/cachyos-omarchy-quattro --single-branch https://github.com/MiguelU-coder/omarchy-on-cachyos.git
+   cd omarchy-on-cachyos
+   ```
+
+   Utiliza uno de los dos bloques, según dónde estén publicados los cambios.
+
+3. Descarga y verifica las fuentes sin modificar el sistema:
+
+   ```bash
+   bash bin/install-omarchy-on-cachyos.sh --prepare-only
+   ```
+
+   Las fuentes se guardan en `~/.cache/omarchy-on-cachyos/source-4.0.4`.
+   El comando se puede ejecutar desde cualquier directorio utilizando la ruta
+   absoluta del script. No necesitas hacer `cd` a Omarchy ni usar `chmod`.
+
+4. Instala:
+
+   ```bash
+   bash bin/install-omarchy-on-cachyos.sh
+   ```
+
+   Escribe `INSTALL` para comenzar e introduce nombre y correo Git si quieres.
+   Revisa las transacciones que presenta pacman. El instalador crea un snapshot
+   y una copia de configuración antes de modificar paquetes. Añade el repositorio
+   estable firmado de Omarchy conservando los repositorios de CachyOS. Lo coloca
+   primero para dar prioridad a paquetes de escritorio con el mismo nombre;
+   esto puede cambiar la procedencia de algunos paquetes del sistema.
+   Construye el adaptador con `makepkg` como usuario, instala la lista de programas
+   de Omarchy, guarda el viejo directorio Hyprland y copia los nuevos ajustes.
+
+5. **Solo si aparece `Installation completed`**, reinicia:
+
+   ```bash
+   systemctl reboot
+   ```
+
+   En SDDM selecciona **Omarchy (Hyprland uwsm)** e inicia sesión. La primera sesión
+   prepara servicios de usuario y preferencias de escritorio. El arranque no se
+   convierte al de la ISO de Omarchy ni se configura inicio automático.
+
+## Si falla o ya ejecutaste el instalador viejo
+
+No vuelvas a ejecutar el instalador antiguo ni borres `~/omarchy` para resolver
+el error de `install.sh`: ese archivo no existe en Quattro. El script viejo
+pudo cambiar `/etc/pacman.conf` y borrar `/etc/sddm.conf` antes de fallar; esta
+adaptación no puede recuperar automáticamente archivos que ya se borraron.
+
+El adaptador reemplaza la sección antigua `[omarchy]` por el servidor estable.
+No elimina una copia de fuentes existente: si está modificada o es de otra
+versión, detiene la ejecución y pide moverla aparte.
+
+Los registros y copias nuevas están en:
+
+```text
+~/.local/state/omarchy-on-cachyos/install-AAAAMMDD-HHMMSS.log
+~/.local/state/omarchy-on-cachyos/backup-AAAAMMDD-HHMMSS-PID/
 ```
 
-**Note:** Please review the script contents before running to understand what changes will be made to your system.
+Si el instalador se detiene, conserva el registro completo. Corrige la causa
+antes de reiniciar. Una repetición crea otra copia, pero no es un mecanismo
+automático de recuperación. Para recuperar una instalación fallida usa tu
+snapshot de CachyOS y la copia de configuración de usuario. Restaurar solo
+`pacman.conf` o `.config` no revierte los paquetes ya instalados.
 
-## 6. Statement of Lack of Warranty
+## Actualizaciones y diferencias
 
-THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+- `sudo pacman -Syu` y `omarchy update` actualizan paquetes de CachyOS/Arch y los
+  programas del repositorio Omarchy. La segunda orden está adaptada para evitar
+  el flujo de migraciones del sistema Omarchy.
+- `omarchy-cachyos` es un paquete local: no recibe automáticamente versiones
+  nuevas del escritorio Omarchy. Para una versión futura, primero actualiza el
+  fork cuando tenga una adaptación revisada y sigue sus instrucciones.
+- No uses el conversor `omarchy-upgrade-to-quattro` ni instales los paquetes
+  oficiales `omarchy` / `omarchy-settings` encima de esta adaptación.
+- Se conservan Fish, tealdeer, red, controladores, login con contraseña y
+  configuración de arranque. No se ejecutan los orquestadores de hardware,
+  configuración del sistema, login o post-instalación de la ISO. Algunas
+  funciones propias de esa ISO (por ejemplo gestión de Limine) no aplican.
+- `bin/nvidia.sh` del instalador anterior fue retirado: ya no participa ningún
+  script personalizado de controladores en la instalación.
 
-Use this script at your own risk. Always backup your system and important data before running installation scripts.
+## Pruebas
 
-## 7. How to Contribute
+En Linux con Bash, Git, AWK y Python 3:
 
-We welcome contributions to improve this project! Here's how you can help:
+```bash
+bash bin/install-omarchy-on-cachyos.sh --prepare-only
+OMARCHY_TEST_SOURCE="$HOME/.cache/omarchy-on-cachyos/source-4.0.4" python3 tests/test_adapter.py
+```
 
-1. **Fork the Repository**: Click the "Fork" button on GitHub to create your own copy
-2. **Create a Feature Branch**: `git checkout -b feature/your-feature-name`
-3. **Make Your Changes**: Implement your improvements or fixes
-4. **Commit Your Changes**: `git commit -m "Add descriptive commit message"`
-5. **Push to Your Fork**: `git push origin feature/your-feature-name`
-6. **Open a Pull Request**: Submit a PR with a clear description of your changes
+La prueba de empaquetado ejecuta `package()` sobre las fuentes reales en una
+carpeta temporal y simula solo la conversión de iconos con ImageMagick. No
+ejecuta pacman ni servicios. Comprueba que no se instalen archivos en rutas de
+arranque, PAM, sudo, SDDM, Snapper, identidad de distribución o repositorios.
 
-### Contribution Guidelines
-- Test your changes thoroughly on CachyOS before submitting
-- Follow existing code style and conventions
-- Update documentation if adding new features
-- Report bugs using GitHub Issues 
+## Licencia
+
+MIT; consulta [LICENSE](LICENSE). Omarchy y sus recetas originales también usan
+MIT. Este adaptador comunitario se distribuye sin garantía.
