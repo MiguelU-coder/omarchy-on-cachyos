@@ -108,6 +108,7 @@ omarchy-provision-user --first-install
 # Skip upstream system/hardware/login orchestrators, which assume Omarchy's
 # drivers, Snapper policy, authentication and boot settings.
 sudo systemctl enable sddm.service NetworkManager.service
+sudo systemctl set-default graphical.target
 echo "Installation completed. Log: $log"
 echo "Reboot manually, then select Omarchy (Hyprland uwsm) in SDDM."
 echo "Use sudo pacman -Syu for system packages; rebuild this fork for adapted Omarchy updates."

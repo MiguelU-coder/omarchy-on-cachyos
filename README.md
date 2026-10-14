@@ -141,6 +141,13 @@ snapshot de CachyOS y la copia de configuración de usuario. Restaurar solo
 
 ## Actualizaciones y diferencias
 
+Si tras una instalación completada el arranque queda en una terminal, inicia
+sesión con tu usuario y ejecuta `sudo systemctl set-default graphical.target`
+y después `sudo systemctl start sddm.service`. En la pantalla gráfica selecciona
+Omarchy (Hyprland uwsm). Si SDDM falla, revisa
+`systemctl status sddm.service --no-pager -l` y
+`journalctl -b -u sddm.service --no-pager -n 50` antes de reinstalar.
+
 - `sudo pacman -Syu` y `omarchy update` actualizan paquetes de CachyOS/Arch y los
   programas del repositorio Omarchy. La segunda orden está adaptada para evitar
   el flujo de migraciones del sistema Omarchy.
