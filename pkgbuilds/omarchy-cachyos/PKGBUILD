@@ -1,0 +1,100 @@
+# Community desktop adapter for CachyOS. Based on the MIT-licensed Omarchy
+# runtime/settings recipes; deliberately excludes their system and boot stack.
+pkgname=omarchy-cachyos
+pkgver=4.0.4
+pkgrel=1
+_commit=c668141e9c42b13c80c9ca4ea108e11708c5e8a5
+pkgdesc='Omarchy desktop defaults and runtime adapted for CachyOS (experimental)'
+arch=(x86_64)
+url='https://github.com/MiguelU-coder/omarchy-on-cachyos'
+license=(MIT)
+provides=("omarchy=$pkgver" "omarchy-settings=$pkgver")
+conflicts=(omarchy omarchy-dev omarchy-settings omarchy-settings-dev)
+depends=(omarchy-keyring 'hyprland>=0.55' quickshell uwsm sddm xdg-desktop-portal-hyprland
+  wireplumber pipewire gnome-keyring gum jq git perl fakeroot pacman-contrib
+  ttf-jetbrains-mono-nerd-basic bash curl hicolor-icon-theme)
+makedepends=(git imagemagick)
+options=(!debug)
+source=("omarchy::git+https://github.com/omacom/omarchy.git#commit=$_commit")
+sha256sums=('8371b148aa06e9d0627c9e11668ef2dfdf54c4a9e5ffbee5aee08c3945073618')
+
+package() {
+  cd "$srcdir/omarchy"
+  install -d "$pkgdir/usr/bin" "$pkgdir/usr/share/omarchy/bin"
+  for executable in bin/*; do
+    [[ -f $executable ]] || continue
+    base=${executable##*/}
+    install -Dm755 "$executable" "$pkgdir/usr/bin/$base"
+    ln -s "/usr/bin/$base" "$pkgdir/usr/share/omarchy/bin/$base"
+  done
+  for directory in install themes migrations shell config default; do
+    cp -a "$directory" "$pkgdir/usr/share/omarchy/"
+  done
+  # Keep the existing user's password-protected keyring/login policy.
+  sed -i '\|/user/default-keyring.sh|d' "$pkgdir/usr/share/omarchy/install/user/all.sh"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  for file in version logo.txt logo.svg icon.txt icon.png; do
+    install -Dm644 "$file" "$pkgdir/usr/share/omarchy/$file"
+  done
+
+  # Ship only desktop integration at live system paths. Do not copy etc/ or
+  # /etc/skel: those trees include mkinitcpio, Limine, PAM, sudo and distro ID.
+  install -Dm644 default/uwsm/env.d/10-omarchy "$pkgdir/usr/share/uwsm/env.d/10-omarchy"
+  install -Dm644 default/environment.d/10-omarchy-fcitx.conf "$pkgdir/usr/lib/environment.d/10-omarchy-fcitx.conf"
+  install -Dm644 default/fontconfig/conf.avail/50-omarchy.conf "$pkgdir/usr/share/fontconfig/conf.avail/50-omarchy.conf"
+  install -d "$pkgdir/etc/fonts/conf.d"
+  ln -s /usr/share/fontconfig/conf.avail/50-omarchy.conf "$pkgdir/etc/fonts/conf.d/50-omarchy.conf"
+  install -Dm644 default/xdg-terminal-exec/hyprland-xdg-terminals.list "$pkgdir/usr/share/xdg-terminal-exec/hyprland-xdg-terminals.list"
+  install -Dm644 default/applications/mimeapps.list "$pkgdir/usr/share/applications/mimeapps.list"
+  install -Dm644 etc/profile.d/omarchy.sh "$pkgdir/etc/profile.d/omarchy.sh"
+  install -Dm644 etc/mise/conf.d/omarchy.toml "$pkgdir/etc/mise/conf.d/omarchy.toml"
+  for service in default/systemd/user/*.service; do
+    install -Dm644 "$service" "$pkgdir/usr/lib/systemd/user/${service##*/}"
+  done
+  # Use the existing SDDM configuration, adding a selectable session only.
+  install -Dm644 default/wayland-sessions/omarchy.desktop "$pkgdir/usr/share/wayland-sessions/omarchy.desktop"
+  install -Dm644 default/fonts/omarchy/omarchy.ttf "$pkgdir/usr/share/fonts/omarchy/omarchy.ttf"
+
+  install -d "$pkgdir/usr/share/applications"
+  for desktop in applications/*.desktop applications/hidden/*.desktop; do
+    [[ ! -f $desktop ]] || install -Dm644 "$desktop" "$pkgdir/usr/share/applications/${desktop##*/}"
+  done
+  for icon in applications/icons/*; do
+    [[ -f $icon ]] || continue
+    icon_name=${icon##*/}
+    icon_id=$(printf '%s' "${icon_name%.*}" | tr '[:upper:]' '[:lower:]' | sed 's/[^[:alnum:]]\+/-/g; s/^-//; s/-$//')
+    if [[ $icon_name == *.svg ]]; then
+      install -Dm644 "$icon" "$pkgdir/usr/share/icons/hicolor/scalable/apps/$icon_id.svg"
+    else
+      for size in 48 256; do
+        install -d "$pkgdir/usr/share/icons/hicolor/${size}x$size/apps"
+        magick "$icon" -thumbnail "${size}x$size" -background transparent -gravity center -extent "${size}x$size" \
+          "PNG32:$pkgdir/usr/share/icons/hicolor/${size}x$size/apps/$icon_id.png"
+      done
+    fi
+  done
+
+  # Quattro's upstream updater/migrations assume its system profile. The
+  # adapter is version-pinned and updates CachyOS packages without that path.
+  cat > "$pkgdir/usr/bin/omarchy-update" <<'UPDATE'
+#!/usr/bin/env bash
+set -euo pipefail
+case ${1:-} in
+  -y) args=(--noconfirm) ;;
+  '') args=() ;;
+  *) echo 'Usage: omarchy update [-y]' >&2; exit 2 ;;
+esac
+sudo pacman -Syu "${args[@]}"
+echo 'CachyOS packages updated. The adapted Omarchy runtime is updated by rebuilding omarchy-on-cachyos.'
+echo 'Reboot if your kernel or desktop was updated.'
+UPDATE
+  chmod 755 "$pkgdir/usr/bin/omarchy-update"
+  # Block the stock conversion path, which installs the boot stack and swaps
+  # pacman.conf. It is not an update path for this desktop adapter.
+  cat > "$pkgdir/usr/bin/omarchy-upgrade-to-quattro" <<'UPGRADE'
+#!/usr/bin/env bash
+echo 'Already using the CachyOS Quattro adapter. Update/rebuild omarchy-on-cachyos instead.' >&2
+exit 1
+UPGRADE
+  chmod 755 "$pkgdir/usr/bin/omarchy-upgrade-to-quattro"
+}

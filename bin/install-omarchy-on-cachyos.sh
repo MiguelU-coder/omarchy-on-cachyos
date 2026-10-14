@@ -1,187 +1,100 @@
-#!/bin/bash
-
-# Check if git is installed
-if ! command -v git &> /dev/null; then
-    echo "Error: git is not installed. Please install git before running this script."
+#!/usr/bin/env bash
+set -eEuo pipefail
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+PROJECT_DIR=$(cd -- "$SCRIPT_DIR/.." && pwd)
+source "$SCRIPT_DIR/release.sh"
+usage() {
+  echo "Usage: bash $0 [--prepare-only]"
+  echo "--prepare-only downloads/verifies v$OMARCHY_VERSION without changing the system."
+}
+prepare_only=0
+case ${1:-} in
+  --prepare-only) prepare_only=1 ;;
+  -h|--help) usage; exit 0 ;;
+  '') ;;
+  *) usage >&2; exit 2 ;;
+esac
+(( $# <= 1 )) || { usage >&2; exit 2; }
+command -v git >/dev/null || { echo "Install git first." >&2; exit 1; }
+export OMARCHY_SOURCE_DIR=${OMARCHY_SOURCE_DIR:-"$HOME/.cache/omarchy-on-cachyos/source-$OMARCHY_VERSION"}
+if (( prepare_only )); then
+  bash "$SCRIPT_DIR/fetch-omarchy.sh"
+  exit 0
+fi
+(( EUID != 0 )) || { echo "Run as your normal user, without sudo." >&2; exit 1; }
+[[ -f /etc/cachyos-release ]] || { echo "This installer requires CachyOS." >&2; exit 1; }
+[[ $(uname -m) == x86_64 ]] || { echo "Only x86_64 is supported." >&2; exit 1; }
+[[ $(findmnt -n -o FSTYPE /) == btrfs ]] || { echo "A Btrfs root is required." >&2; exit 1; }
+for command in sudo pacman pacman-key makepkg snapper; do
+  command -v "$command" >/dev/null || { echo "Required command missing: $command" >&2; exit 1; }
+done
+sudo snapper -c root get-config >/dev/null
+for package in gnome-shell plasma-desktop omarchy omarchy-dev omarchy-settings omarchy-settings-dev; do
+  if pacman -Qq "$package" 2>/dev/null | grep -Fxq "$package"; then
+    echo "Found $package. Use a fresh CachyOS Hyprland installation; this is not a conversion tool." >&2
     exit 1
-fi
-
-# Fetch Omarchy from repo
-echo "Fetching Omarchy source..."
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-OMARCHY_DIR="$SCRIPT_DIR/../../omarchy"
-
-if [ -f "./fetch-omarchy.sh" ]; then
-    chmod +x ./fetch-omarchy.sh
-    ./fetch-omarchy.sh
-else
-    # Fallback if script is missing
-    echo "fetch-omarchy.sh not found, falling back to default clone..."
-    git clone https://www.github.com/basecamp/omarchy "$OMARCHY_DIR"
-fi
-
-if [ ! -d "$OMARCHY_DIR" ]; then
-    echo "Error: Failed to fetch Omarchy source at $OMARCHY_DIR"
-    exit 1
-fi
-
-# Check if yay is installed
-if ! command -v yay &> /dev/null; then
-    echo "yay is not installed. Installing yay..."
-
-    # Install dependencies for building yay
-    sudo pacman -S --needed --noconfirm git base-devel
-
-    # Clone and build yay
-    git clone https://aur.archlinux.org/yay.git /tmp/yay
-    cd /tmp/yay
-    makepkg -si --noconfirm
-    cd -
-
-    # Clean up
-    rm -rf /tmp/yay
-
-    if ! command -v yay &> /dev/null; then
-        echo "Error: Failed to install yay."
-        exit 1
-    fi
-
-    echo "yay has been successfully installed."
-else
-    echo "yay is already installed."
-fi
-
-# Receive the Omarchy signing key
-sudo pacman-key --recv-keys F0134EE680CAC571
-
-# Locally sign and trust the key
-sudo pacman-key --lsign-key F0134EE680CAC571
-
-# Add omarchy repository to pacman.conf (skip if already present)
-if ! grep -q '^\[omarchy\]' /etc/pacman.conf; then
-    echo -e "\n[omarchy]\nSigLevel = Optional TrustedOnly\nServer = https://pkgs.omarchy.org/\$arch" | sudo tee -a /etc/pacman.conf > /dev/null
-else
-    echo "Omarchy repository already present in pacman.conf, skipping."
-fi
-sudo pacman -Syu
-
-# Remove CachyOS SDDM config
-if [ -f /etc/sddm.conf ]; then
-    echo "Removing /etc/sddm.conf"
-    sudo rm /etc/sddm.conf
-fi
-
-# Prompt user for username
-echo ""
-echo "Please enter your username:"
-read -r OMARCHY_USER_NAME
-export OMARCHY_USER_NAME
-
-# Prompt user for email address
-echo ""
-echo "Please enter your email address:"
-read -r OMARCHY_USER_EMAIL
-export OMARCHY_USER_EMAIL
-
-# Make adjustments to Omarchy install scripts to support CachyOS
-echo ""
-echo "Making adjustments to Omarchy install scripts to support CachyOS..."
-
-# Navigate to Omarchy install scripts
-cd ../omarchy
-
-# Remove tldr installation to prevent conflict with tealdeer install.
-sed -i '/tldr/d' install/omarchy-base.packages
-
-# Update restart-needed for kernel updates to use cachyos instead of arch
-sed -i "s/ | sed 's\/-arch\/\\\.arch\/'//" bin/omarchy-update-restart
-sed -i "s/'{print \$2}'/'{print \$2 \"-\" \$1}' | sed 's\/-linux\/\/'/" bin/omarchy-update-restart
-sed -i '/linux-cachyos/ ! s/pacman -Q linux/pacman -Q linux-cachyos/' bin/omarchy-update-restart
-
-# Remove pacman.sh from preflight/all.sh to prevent conflict with cachyos packages
-sed -i '/run_logged \$OMARCHY_INSTALL\/preflight\/pacman\.sh/d' install/preflight/all.sh
-
-# Replace nvidia.sh with custom CachyOS 580xx Driver Logic
-cp ../bin/nvidia.sh install/config/hardware/nvidia.sh
-chmod +x install/config/hardware/nvidia.sh
-
-# Fix omarchy-ai-skill.sh symlink to be idempotent on re-runs
-sed -i 's/ln -s/ln -sf/' install/config/omarchy-ai-skill.sh
-
-# Remove plymouth.sh source line from install.sh
-sed -i '/run_logged \$OMARCHY_INSTALL\/login\/plymouth\.sh/d' install/login/all.sh
-
-# Remove limine-snapper.sh source line from install.sh
-sed -i '/run_logged \$OMARCHY_INSTALL\/login\/limine-snapper\.sh/d' install/login/all.sh
-
-# Remove alt-bootloaders.sh source line from install.sh
-sed -i '/run_logged \$OMARCHY_INSTALL\/login\/alt-bootloaders\.sh/d' install/login/all.sh
-
-# Remove pacman.sh from post-install/all.sh to prevent conflict with cachyos packages
-sed -i '/run_logged \$OMARCHY_INSTALL\/post-install\/pacman\.sh/d' install/post-install/all.sh
-
-# Disable wpa_supplicant and configure NetworkManager to use iwd backend.
-# CachyOS enables wpa_supplicant by default, which conflicts with omarchy's iwd,
-# causing WiFi to appear connected but have no IP or connectivity.
-cat >> install/config/hardware/network.sh << 'NETEOF'
-
-# Disable wpa_supplicant to prevent conflict with iwd
-sudo systemctl disable --now wpa_supplicant.service 2>/dev/null
-
-# Configure NetworkManager to use iwd as its WiFi backend
-if ! grep -q "wifi.backend=iwd" /etc/NetworkManager/NetworkManager.conf 2>/dev/null; then
-  sudo tee -a /etc/NetworkManager/NetworkManager.conf > /dev/null << EOF
-
-[device]
-wifi.backend=iwd
-EOF
-fi
-NETEOF
-
-# Pin walker to the omarchy repo so CachyOS doesn't override it with an
-# incompatible version that breaks compatibility with elephant.
-sed -i '1a\
-# Pin walker to omarchy repo to prevent CachyOS version conflict\
-if ! grep -q "^IgnorePkg.*walker" /etc/pacman.conf 2>/dev/null; then\
-  if grep -q "^IgnorePkg" /etc/pacman.conf; then\
-    sudo sed -i '"'"'s/^IgnorePkg = \\(.*\\)/IgnorePkg = \\1 walker/'"'"' /etc/pacman.conf\
-  else\
-    sudo sed -i '"'"'/^\\[options\\]/a IgnorePkg = walker'"'"' /etc/pacman.conf\
-  fi\
-fi\
-' install/config/walker-elephant.sh
-
-# Update mise activation to support both bash and fish
-sed -i 's/omarchy-cmd-present mise && eval "\$(mise activate bash)"/if [ "\$SHELL" = "\/bin\/bash" ] \&\& command -v mise \&> \/dev\/null; then\n  eval "\$(mise activate bash)"\nelif [ "\$SHELL" = "\/bin\/fish" ] \&\& command -v mise \&> \/dev\/null; then\n  mise activate fish | source\nfi/' config/uwsm/env
-
-# Copy omarchy installation files to ~/.local/share/omarchy
-mkdir -p ~/.local/share/omarchy
-cp -r . ~/.local/share/omarchy
-cd ~/.local/share/omarchy
-
-# Pause and prompt for acknowledgment to begin installation
-echo ""
-echo "The following adjustments have been completed."
-echo " 1. Added Omarchy repo to pacman.conf"
-echo " 2. Removed tldr from packages.sh to avoid conflict with tealdeer on CachyOS."
-echo " 3. Disabled further Omarchy changes to pacman.conf, preserving CachyOS settings."
-echo " 4. Replaced nvidia.sh to respect existing CachyOS NVIDIA drivers (only installs if none present)."
-echo " 5. Removed plymouth.sh from install.sh to avoid conflict with CachyOS login display manager installation."
-echo " 6. Removed limine-snapper.sh from install.sh to avoid conflict with CachyOS boot loader installation."
-echo " 7. Removed alt-bootloaders.sh from install.sh to avoid conflict with CachyOS boot loader installation."
-echo " 8. Removed /etc/sddm.conf to avoid conflict with Omarchy UWSM session autologin."
-echo " 9. Disabled wpa_supplicant and configured NetworkManager to use iwd backend."
-echo "10. Pinned walker to omarchy repo to prevent CachyOS version conflict."
-echo ""
-echo "IMPORTANT: If you installed CachyOS without a deskop environment, you will not have a display manager installed." 
-echo "If this is the case, you will need to run the following command after this installation script is complete:"
-echo " 1.) ~/.local/share/omarchy/install/login/plymouth.sh"  
-echo ""
-echo "The aboves script will modify your boot to start Omarchy's Hyprland desktop automatically." 
-echo ""
-echo "Press Enter to begin the installation of Omarchy..."
-read -r
-
-# Run the modified install.sh script 
-chmod +x install.sh
-./install.sh
+  fi
+done
+bash "$SCRIPT_DIR/fetch-omarchy.sh"
+state_dir="$HOME/.local/state/omarchy-on-cachyos"
+mkdir -p "$state_dir"
+log="$state_dir/install-$(date +%Y%m%d-%H%M%S).log"
+exec > >(tee -a "$log") 2>&1
+trap 'echo "Stopped at line $LINENO. Log: $log. Fix the reported error before rebooting." >&2' ERR
+echo "Omarchy $OMARCHY_VERSION on CachyOS (community adapter; experimental)."
+echo "Installs desktop/apps and replaces desktop configs. Keeps CachyOS kernel, drivers and bootloader."
+echo "Omarchy desktop packages take precedence over CachyOS packages with the same names."
+read -r -p "Type INSTALL to continue: " answer
+[[ $answer == INSTALL ]] || exit 0
+read -r -p "Git display name (optional): " OMARCHY_USER_NAME
+read -r -p "Git email (optional): " OMARCHY_USER_EMAIL
+export OMARCHY_USER_NAME OMARCHY_USER_EMAIL
+backup="$state_dir/backup-$(date +%Y%m%d-%H%M%S)-$$"
+mkdir -p "$backup"
+sudo cp -a /etc/pacman.conf "$backup/pacman.conf"
+[[ ! -e $HOME/.config ]] || cp -a "$HOME/.config" "$backup/config"
+[[ ! -e $HOME/.bashrc ]] || cp -a "$HOME/.bashrc" "$backup/bashrc"
+[[ ! -e $HOME/.local/state/omarchy ]] || cp -a "$HOME/.local/state/omarchy" "$backup/omarchy-state"
+sudo snapper -c root create --description "Before Omarchy on CachyOS $OMARCHY_VERSION"
+echo "Config backup: $backup"
+fingerprint=40DFB630FF42BCFFB047046CF0134EE680CAC571
+sudo pacman-key --recv-keys "$fingerprint" --keyserver keys.openpgp.org
+sudo pacman-key --lsign-key "$fingerprint"
+new_config=$(mktemp)
+awk -f "$SCRIPT_DIR/pacman-config.awk" /etc/pacman.conf > "$new_config"
+sudo install -m 644 "$new_config" /etc/pacman.conf
+rm -f "$new_config"
+sudo pacman -Syu --needed base-devel git imagemagick omarchy-keyring
+# Official Quattro packages pull in Limine. Build the reviewed CachyOS variant.
+mkdir -p "$HOME/.cache/omarchy-on-cachyos"
+build_dir=$(mktemp -d "$HOME/.cache/omarchy-on-cachyos/build.XXXXXX")
+cp "$PROJECT_DIR/pkgbuilds/omarchy-cachyos/PKGBUILD" "$build_dir/"
+(cd "$build_dir" && makepkg --syncdeps --noconfirm)
+package_list=$(cd "$build_dir" && makepkg --packagelist)
+mapfile -t local_packages <<< "$package_list"
+for package_file in "${local_packages[@]}"; do
+  [[ -f $package_file ]] || { echo "Built package missing: $package_file" >&2; exit 1; }
+done
+sudo pacman -U --needed "${local_packages[@]}"
+# The ISO normally installs this list. Preserve tealdeer and boot integration.
+mapfile -t packages < <(sed 's/#.*//' "$OMARCHY_SOURCE_DIR/install/omarchy-base.packages" |
+  awk 'NF && $1 !~ /^(tldr|plymouth|kernel-modules-hook)$/ {print $1}')
+sudo pacman -S --needed "${packages[@]}" tealdeer pipewire pipewire-alsa pipewire-pulse qt6-wayland
+# Retire hyprland.conf so it cannot override the new Lua configuration.
+mkdir -p "$HOME/.config"
+[[ ! -e $HOME/.config/hypr ]] || mv "$HOME/.config/hypr" "$backup/hypr-retired"
+cp -a /usr/share/omarchy/config/. "$HOME/.config/"
+mkdir -p "$HOME/.local/state/omarchy/toggles/hypr" "$HOME/.local/share/nautilus-python/extensions"
+cp /usr/share/omarchy/default/hypr/toggles/flags.lua "$HOME/.local/state/omarchy/toggles/hypr/"
+cp /usr/share/omarchy/default/nautilus-python/extensions/*.py "$HOME/.local/share/nautilus-python/extensions/"
+export OMARCHY_PATH=/usr/share/omarchy
+export OMARCHY_INSTALL="$OMARCHY_PATH/install"
+export PATH="$OMARCHY_PATH/bin:$PATH"
+export OMARCHY_SETUP_CONTEXT=cachyos
+omarchy-provision-user --first-install
+# Skip upstream system/hardware/login orchestrators, which assume Omarchy's
+# drivers, Snapper policy, authentication and boot settings.
+sudo systemctl enable sddm.service NetworkManager.service
+echo "Installation completed. Log: $log"
+echo "Reboot manually, then select Omarchy (Hyprland uwsm) in SDDM."
+echo "Use sudo pacman -Syu for system packages; rebuild this fork for adapted Omarchy updates."
