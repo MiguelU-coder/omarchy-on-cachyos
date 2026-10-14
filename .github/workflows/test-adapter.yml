@@ -1,0 +1,20 @@
+name: Validate CachyOS adapter
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  adapter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify the pinned upstream checkout
+        env:
+          OMARCHY_SOURCE_DIR: ${{ runner.temp }}/omarchy-source
+        run: bash bin/install-omarchy-on-cachyos.sh --prepare-only
+      - name: Test paths, source verification and package contents
+        env:
+          OMARCHY_TEST_SOURCE: ${{ runner.temp }}/omarchy-source
+        run: python3 tests/test_adapter.py

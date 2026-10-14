@@ -43,7 +43,7 @@ class AdapterTests(unittest.TestCase):
         original = ('[options]\nArchitecture = auto\nIgnorePkg = custom\n'
                     '[cachyos]\nInclude = /etc/pacman.d/cachyos-mirrorlist\n'
                     '[core]\nInclude = /etc/pacman.d/mirrorlist\n'
-                    '[omarchy]\nSigLevel = Optional TrustedOnly\nServer = OLD\n'
+                    '[omarchy] # old adapter\nSigLevel = Optional TrustedOnly\nServer = OLD\n'
                     '[extra]\nInclude = /etc/pacman.d/mirrorlist\n')
         result = run('awk', '-f', str(ROOT / 'bin/pacman-config.awk'), input=original)
         self.assertEqual(result.returncode, 0, result.stderr)

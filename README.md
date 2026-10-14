@@ -68,15 +68,6 @@ una instalación prescindible o una VM con snapshot.
    cd omarchy-on-cachyos
    ```
 
-   Si el arreglo todavía está en una rama/PR, clónala directamente:
-
-   ```bash
-   git clone --branch fix/cachyos-omarchy-quattro --single-branch https://github.com/MiguelU-coder/omarchy-on-cachyos.git
-   cd omarchy-on-cachyos
-   ```
-
-   Utiliza uno de los dos bloques, según dónde estén publicados los cambios.
-
 3. Descarga y verifica las fuentes sin modificar el sistema:
 
    ```bash

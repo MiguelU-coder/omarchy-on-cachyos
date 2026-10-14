@@ -8,7 +8,7 @@ function omarchy() {
   added=1
 }
 /^[[:space:]]*\[[^]]+\]/ {
-  skip=($0 ~ /^[[:space:]]*\[omarchy\][[:space:]]*$/)
+  skip=($0 ~ /^[[:space:]]*\[omarchy\][[:space:]]*(#.*)?$/)
   if ($0 !~ /^[[:space:]]*\[options\]/ && !added) omarchy()
 }
 !skip { print }

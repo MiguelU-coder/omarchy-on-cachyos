@@ -66,10 +66,15 @@ sudo install -m 644 "$new_config" /etc/pacman.conf
 rm -f "$new_config"
 sudo pacman -Syu --needed base-devel git imagemagick omarchy-keyring
 # Official Quattro packages pull in Limine. Build the reviewed CachyOS variant.
+mkdir -p "$HOME/.cache/omarchy-on-cachyos"
 build_dir=$(mktemp -d "$HOME/.cache/omarchy-on-cachyos/build.XXXXXX")
 cp "$PROJECT_DIR/pkgbuilds/omarchy-cachyos/PKGBUILD" "$build_dir/"
 (cd "$build_dir" && makepkg --syncdeps --noconfirm)
-mapfile -t local_packages < <(cd "$build_dir" && makepkg --packagelist)
+package_list=$(cd "$build_dir" && makepkg --packagelist)
+mapfile -t local_packages <<< "$package_list"
+for package_file in "${local_packages[@]}"; do
+  [[ -f $package_file ]] || { echo "Built package missing: $package_file" >&2; exit 1; }
+done
 sudo pacman -U --needed "${local_packages[@]}"
 # The ISO normally installs this list. Preserve tealdeer and boot integration.
 mapfile -t packages < <(sed 's/#.*//' "$OMARCHY_SOURCE_DIR/install/omarchy-base.packages" |
