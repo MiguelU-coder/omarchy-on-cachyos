@@ -109,6 +109,11 @@ class AdapterTests(unittest.TestCase):
             payload = directory / 'pkg'
             self.assertTrue((payload / 'usr/share/omarchy/config/hypr/hyprland.lua').is_file())
             self.assertTrue((payload / 'usr/share/omarchy/shell').is_dir())
+            for app in ('foot', 'imv', 'mpv'):
+                self.assertTrue((payload / f'usr/share/omarchy/applications/{app}.desktop').is_file())
+                self.assertFalse((payload / f'usr/share/applications/{app}.desktop').exists())
+            self.assertTrue((payload / 'usr/share/omarchy/application-icons/hicolor').is_dir())
+            self.assertFalse((payload / 'usr/share/icons/hicolor').exists())
             self.assertTrue((payload / 'usr/share/wayland-sessions/omarchy.desktop').is_file())
             self.assertTrue((payload / 'usr/bin/omarchy-update').stat().st_mode & 0o111)
             for forbidden in ('boot', 'etc/mkinitcpio.conf.d', 'etc/limine-entry-tool.d',

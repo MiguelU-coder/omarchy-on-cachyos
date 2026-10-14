@@ -61,6 +61,8 @@ sudo cp -a /etc/pacman.conf "$backup/pacman.conf"
 [[ ! -e $HOME/.config ]] || cp -a "$HOME/.config" "$backup/config"
 [[ ! -e $HOME/.bashrc ]] || cp -a "$HOME/.bashrc" "$backup/bashrc"
 [[ ! -e $HOME/.local/state/omarchy ]] || cp -a "$HOME/.local/state/omarchy" "$backup/omarchy-state"
+[[ ! -e $HOME/.local/share/applications ]] || cp -a "$HOME/.local/share/applications" "$backup/applications"
+[[ ! -e $HOME/.local/share/icons ]] || cp -a "$HOME/.local/share/icons" "$backup/icons"
 sudo snapper -c root create --description "Before Omarchy on CachyOS $OMARCHY_VERSION"
 echo "Config backup: $backup"
 fingerprint=40DFB630FF42BCFFB047046CF0134EE680CAC571
@@ -90,6 +92,11 @@ sudo pacman -S --needed "${packages[@]}" tealdeer pipewire pipewire-alsa pipewir
 mkdir -p "$HOME/.config"
 [[ ! -e $HOME/.config/hypr ]] || mv "$HOME/.config/hypr" "$backup/hypr-retired"
 cp -a /usr/share/omarchy/config/. "$HOME/.config/"
+mkdir -p "$HOME/.local/share/icons/hicolor" "$HOME/.local/share/applications"
+cp -a /usr/share/omarchy/application-icons/hicolor/. "$HOME/.local/share/icons/hicolor/"
+for desktop in /usr/share/omarchy/applications/hidden/*.desktop; do
+  [[ ! -f $desktop ]] || cp "$desktop" "$HOME/.local/share/applications/"
+done
 mkdir -p "$HOME/.local/state/omarchy/toggles/hypr" "$HOME/.local/share/nautilus-python/extensions"
 cp /usr/share/omarchy/default/hypr/toggles/flags.lua "$HOME/.local/state/omarchy/toggles/hypr/"
 cp /usr/share/omarchy/default/nautilus-python/extensions/*.py "$HOME/.local/share/nautilus-python/extensions/"

@@ -2,7 +2,7 @@
 # runtime/settings recipes; deliberately excludes their system and boot stack.
 pkgname=omarchy-cachyos
 pkgver=4.0.4
-pkgrel=1
+pkgrel=2
 _commit=c668141e9c42b13c80c9ca4ea108e11708c5e8a5
 pkgdesc='Omarchy desktop defaults and runtime adapted for CachyOS (experimental)'
 arch=(x86_64)
@@ -27,7 +27,7 @@ package() {
     install -Dm755 "$executable" "$pkgdir/usr/bin/$base"
     ln -s "/usr/bin/$base" "$pkgdir/usr/share/omarchy/bin/$base"
   done
-  for directory in install themes migrations shell config default; do
+  for directory in install themes migrations shell config default applications; do
     cp -a "$directory" "$pkgdir/usr/share/omarchy/"
   done
   # Keep the existing user's password-protected keyring/login policy.
@@ -55,21 +55,20 @@ package() {
   install -Dm644 default/wayland-sessions/omarchy.desktop "$pkgdir/usr/share/wayland-sessions/omarchy.desktop"
   install -Dm644 default/fonts/omarchy/omarchy.ttf "$pkgdir/usr/share/fonts/omarchy/omarchy.ttf"
 
-  install -d "$pkgdir/usr/share/applications"
-  for desktop in applications/*.desktop applications/hidden/*.desktop; do
-    [[ ! -f $desktop ]] || install -Dm644 "$desktop" "$pkgdir/usr/share/applications/${desktop##*/}"
-  done
+  # Application launchers and icons override defaults at user scope. Never own
+  # /usr/share/applications/{foot,imv,mpv}.desktop or icons shipped by those apps.
+  icon_root="$pkgdir/usr/share/omarchy/application-icons/hicolor"
   for icon in applications/icons/*; do
     [[ -f $icon ]] || continue
     icon_name=${icon##*/}
     icon_id=$(printf '%s' "${icon_name%.*}" | tr '[:upper:]' '[:lower:]' | sed 's/[^[:alnum:]]\+/-/g; s/^-//; s/-$//')
     if [[ $icon_name == *.svg ]]; then
-      install -Dm644 "$icon" "$pkgdir/usr/share/icons/hicolor/scalable/apps/$icon_id.svg"
+      install -Dm644 "$icon" "$icon_root/scalable/apps/$icon_id.svg"
     else
       for size in 48 256; do
-        install -d "$pkgdir/usr/share/icons/hicolor/${size}x$size/apps"
+        install -d "$icon_root/${size}x$size/apps"
         magick "$icon" -thumbnail "${size}x$size" -background transparent -gravity center -extent "${size}x$size" \
-          "PNG32:$pkgdir/usr/share/icons/hicolor/${size}x$size/apps/$icon_id.png"
+          "PNG32:$icon_root/${size}x$size/apps/$icon_id.png"
       done
     fi
   done

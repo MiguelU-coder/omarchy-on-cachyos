@@ -118,6 +118,11 @@ pudo cambiar `/etc/pacman.conf` y borrar `/etc/sddm.conf` antes de fallar; esta
 adaptación no puede recuperar automáticamente archivos que ya se borraron.
 
 El adaptador reemplaza la sección antigua `[omarchy]` por el servidor estable.
+Si falló con conflictos de `foot.desktop`, `imv.desktop` o `mpv.desktop`, actualiza
+el fork con `git pull --ff-only origin main` y ejecuta de nuevo el instalador.
+La revisión `4.0.4-2` del adaptador libera esas rutas al actualizar el paquete;
+los lanzadores e iconos de Omarchy se aplican en `~/.local/share`. No necesitas
+usar `--overwrite` ni borrar archivos propiedad de paquetes manualmente.
 No elimina una copia de fuentes existente: si está modificada o es de otra
 versión, detiene la ejecución y pide moverla aparte.
 
