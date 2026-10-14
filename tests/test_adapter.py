@@ -12,6 +12,32 @@ def run(*args, **kwargs):
 
 
 class AdapterTests(unittest.TestCase):
+    def test_platform_detection(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            release, marker, arch = (root / name for name in ('os-release', 'cachyos-release', 'arch-release'))
+            script = 'source "$1"; omarchy_check_platform "$2" "$3" "$4" "$5" "$6"'
+            def check(kernel='6.18-cachyos', allow='0'):
+                return run('bash', '-eu', '-c', script, 'bash', str(ROOT / 'bin/check-platform.sh'),
+                           str(release), str(marker), str(arch), kernel, allow)
+            # Genuine CachyOS has distro identity even without a release marker.
+            for identity in ('cachyos', '"cachyos"', "'cachyos'"):
+                release.write_text('NAME=CachyOS\nID=' + identity + '\n')
+                self.assertEqual(check().returncode, 0)
+            release.write_text('ID=arch\n')
+            arch.touch()
+            self.assertNotEqual(check().returncode, 0)
+            self.assertEqual(check(allow='1').returncode, 0)
+            self.assertNotEqual(check(kernel='6.18-arch1-1', allow='1').returncode, 0)
+            release.write_text('ID=manjaro\nID_LIKE=arch\n')
+            self.assertNotEqual(check(allow='1').returncode, 0)
+            release.write_text('ID=ubuntu\n')
+            self.assertNotEqual(check(allow='1').returncode, 0)
+            release.unlink()
+            self.assertNotEqual(check(allow='1').returncode, 0)
+            marker.touch()
+            self.assertEqual(check().returncode, 0)
+
     def test_bash_syntax(self):
         for path in [*ROOT.glob('bin/*.sh'), ROOT / 'pkgbuilds/omarchy-cachyos/PKGBUILD']:
             result = run('bash', '-n', str(path))

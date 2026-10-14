@@ -24,6 +24,13 @@ cambiar `bin/release.sh` y el `PKGBUILD`. No se ofrece una opción `main/dev`.
 ## Antes de instalar
 
 - CachyOS ya instalado, x86_64, raíz Btrfs y configuración Snapper `root` válida.
+  Se identifica mediante `ID=cachyos` en `/etc/os-release`; no es necesario que
+  exista `/etc/cachyos-release`.
+  Si usas Arch con un kernel CachyOS, puedes optar por la adaptación experimental
+  con `bash bin/install-omarchy-on-cachyos.sh --allow-arch-with-cachyos-kernel`.
+  Esta opción comprueba `ID=arch`, `/etc/arch-release` y que el kernel en ejecución
+  contenga `cachyos`; no elimina los demás requisitos. No equivale a probar la
+  adaptación en esa combinación de sistema y kernel.
 - Se recomienda una instalación nueva con el escritorio Hyprland de CachyOS y
   SDDM. El adaptador también instala SDDM si falta. Rechaza GNOME, Plasma y una
   instalación de los paquetes oficiales de Omarchy.

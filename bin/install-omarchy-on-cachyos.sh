@@ -3,18 +3,22 @@ set -eEuo pipefail
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 PROJECT_DIR=$(cd -- "$SCRIPT_DIR/.." && pwd)
 source "$SCRIPT_DIR/release.sh"
+source "$SCRIPT_DIR/check-platform.sh"
 usage() {
-  echo "Usage: bash $0 [--prepare-only]"
+  echo "Usage: bash $0 [--prepare-only] [--allow-arch-with-cachyos-kernel]"
   echo "--prepare-only downloads/verifies v$OMARCHY_VERSION without changing the system."
 }
 prepare_only=0
-case ${1:-} in
-  --prepare-only) prepare_only=1 ;;
-  -h|--help) usage; exit 0 ;;
-  '') ;;
-  *) usage >&2; exit 2 ;;
-esac
-(( $# <= 1 )) || { usage >&2; exit 2; }
+allow_arch=0
+while (( $# )); do
+  case $1 in
+    --prepare-only) prepare_only=1 ;;
+    --allow-arch-with-cachyos-kernel) allow_arch=1 ;;
+    -h|--help) usage; exit 0 ;;
+    *) usage >&2; exit 2 ;;
+  esac
+  shift
+done
 command -v git >/dev/null || { echo "Install git first." >&2; exit 1; }
 export OMARCHY_SOURCE_DIR=${OMARCHY_SOURCE_DIR:-"$HOME/.cache/omarchy-on-cachyos/source-$OMARCHY_VERSION"}
 if (( prepare_only )); then
@@ -22,7 +26,9 @@ if (( prepare_only )); then
   exit 0
 fi
 (( EUID != 0 )) || { echo "Run as your normal user, without sudo." >&2; exit 1; }
-[[ -f /etc/cachyos-release ]] || { echo "This installer requires CachyOS." >&2; exit 1; }
+os_release=/etc/os-release
+[[ -r $os_release ]] || os_release=/usr/lib/os-release
+omarchy_check_platform "$os_release" /etc/cachyos-release /etc/arch-release "$(uname -r)" "$allow_arch"
 [[ $(uname -m) == x86_64 ]] || { echo "Only x86_64 is supported." >&2; exit 1; }
 [[ $(findmnt -n -o FSTYPE /) == btrfs ]] || { echo "A Btrfs root is required." >&2; exit 1; }
 for command in sudo pacman pacman-key makepkg snapper; do
